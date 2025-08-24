@@ -47,11 +47,11 @@ const HEAT = {
   GRADIENT: { 0.0: "#22c55e", 0.35: "#eab308", 0.7: "#ef4444", 1.0: "#7f1d1d" } as Record<number, string>,
 } as const;
 
-const EX_POLYGON: PolygonLngLat = [
-  [-52.7798284, -26.2730886],
-  [-52.7678284, -26.2730886],
-  [-52.7678284, -26.2820886],
-  [-52.7798284, -26.2820886],
+const EX_POLYGON: [number, number][] = [
+  [-52.7730666, -26.2721379], 
+  [-52.7610445, -26.2721379], 
+  [-52.7610445, -26.2829176], 
+  [-52.7730666, -26.2829176], 
 ];
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
