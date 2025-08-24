@@ -7,8 +7,8 @@ import { CircleMarker, MapContainer, Pane, Polygon, TileLayer, useMap } from "re
 type Passada = "pre" | "plantio" | "adubo";
 type ClasseDeteccao = "erva" | "doenca";
 
-type LatLng = [number, number];             
-type LatLngLeaflet = [number, number];       
+type LatLng = [number, number];
+type LatLngLeaflet = [number, number];
 type PolygonLngLat = LatLng[];
 
 interface Hotspot {
@@ -48,14 +48,28 @@ const HEAT = {
 } as const;
 
 const EX_POLYGON: [number, number][] = [
-  [-52.7730666, -26.2721379], 
-  [-52.7610445, -26.2721379], 
-  [-52.7610445, -26.2829176], 
-  [-52.7730666, -26.2829176], 
+  [-52.7730666, -26.2721379],
+  [-52.7610445, -26.2721379],
+  [-52.7610445, -26.2829176],
+  [-52.7730666, -26.2829176],
 ];
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+const BREAKPOINTS = { phone: 640, tablet: 1024 };
+
+function useBreakpoint() {
+  const [w, setW] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => {
+    const on = () => setW(window.innerWidth);
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  const isPhone = w < BREAKPOINTS.phone;
+  const isTablet = w >= BREAKPOINTS.phone && w < BREAKPOINTS.tablet;
+  return { w, isPhone, isTablet };
+}
 
 function pointInPolygon(point: LatLng, polygon: PolygonLngLat) {
   const [x, y] = point;
@@ -166,7 +180,8 @@ function makeDetections(hotspots: Hotspot[], polygon: PolygonLngLat, seed: numbe
       let lng = h.lng + dx;
       let lat = h.lat + dy;
       if (!pointInPolygon([lng, lat], polygon)) {
-        lng = h.lng; lat = h.lat;
+        lng = h.lng;
+        lat = h.lat;
       }
       const classe: ClasseDeteccao = rnd() < 0.75 ? "erva" : "doenca";
       const conf = Math.round((0.6 + rnd() * 0.38) * 100) / 100;
@@ -204,18 +219,35 @@ const Progress = memo(function Progress({ value }: { value: number }) {
 });
 
 const Sparkline = memo(function Sparkline({ data, stroke = "#0ea5e9" }: { data: number[]; stroke?: string }) {
-  const w = 160, h = 40, p = 4;
+  const w = 160,
+    h = 40,
+    p = 4;
   if (!data.length) return <svg width={w} height={h} />;
-  const min = Math.min(...data), max = Math.max(...data);
+  const min = Math.min(...data),
+    max = Math.max(...data);
   const scaleX = (i: number) => p + (i * (w - 2 * p)) / (data.length - 1 || 1);
   const scaleY = (v: number) => h - p - ((v - min) / Math.max(1e-6, max - min)) * (h - 2 * p);
   const d = data.map((v, i) => `${i === 0 ? "M" : "L"} ${scaleX(i)} ${scaleY(v)}`).join(" ");
-  return <svg width={w} height={h}><path d={d} fill="none" stroke={stroke} strokeWidth={2} /></svg>;
+  return (
+    <svg width={w} height={h}>
+      <path d={d} fill="none" stroke={stroke} strokeWidth={2} />
+    </svg>
+  );
 });
 
 const IndicatorCard = memo(function IndicatorCard({
-  title, value, subtitle, accent = "#0ea5e9", footer,
-}: { title: string; value: string; subtitle?: string; accent?: string; footer?: React.ReactNode }) {
+  title,
+  value,
+  subtitle,
+  accent = "#0ea5e9",
+  footer,
+}: {
+  title: string;
+  value: string;
+  subtitle?: string;
+  accent?: string;
+  footer?: React.ReactNode;
+}) {
   return (
     <div style={{ background: "#fff", borderRadius: UI.CARD_RADIUS, border: UI.BORDER, boxShadow: UI.SHADOW, padding: 16 }}>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>{title}</div>
@@ -248,13 +280,27 @@ const Chip = memo(function Chip({ active, onClick, children }: { active: boolean
 });
 
 function HeatLayer({
-  points, radius = 15, blur = 20, maxZoom = 19, pane,
-}: { points: [number, number, number][]; radius?: number; blur?: number; maxZoom?: number; pane?: string; }) {
+  points,
+  radius = 15,
+  blur = 20,
+  maxZoom = 19,
+  pane,
+}: {
+  points: [number, number, number][];
+  radius?: number;
+  blur?: number;
+  maxZoom?: number;
+  pane?: string;
+}) {
   const map = useMap();
   useEffect(() => {
     const layer = (L as any).heatLayer(points, {
-      radius, blur, maxZoom, pane,
-      minOpacity: 0.25, maxOpacity: 0.95,
+      radius,
+      blur,
+      maxZoom,
+      pane,
+      minOpacity: 0.25,
+      maxOpacity: 0.95,
       gradient: HEAT.GRADIENT,
     });
     layer.addTo(map);
@@ -265,21 +311,59 @@ function HeatLayer({
 
 function FitView({ bounds }: { bounds: L.LatLngBounds }) {
   const map = useMap();
-  useEffect(() => { map.fitBounds(bounds, { padding: [20, 20] }); }, [map, bounds]);
+  useEffect(() => {
+    map.fitBounds(bounds, { padding: [20, 20] });
+  }, [map, bounds]);
   return null;
 }
 
 const EvidencePanel = memo(function EvidencePanel({ det, onClose }: { det: Detection; onClose: () => void }) {
+  const { isPhone } = useBreakpoint();
   const date = new Date(det.ts);
   const tagBg = det.classe === "erva" ? "#16a34a" : "#ef4444";
+
+  const sheetStyle: React.CSSProperties = isPhone
+    ? {
+        position: "fixed",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 2000,
+        width: "100%",
+        border: UI.BORDER,
+        borderRadius: "16px 16px 0 0",
+        boxShadow: "0 -16px 50px rgba(0,0,0,0.25)",
+        background: "#fff",
+        overflow: "hidden",
+      }
+    : {
+        position: "absolute",
+        right: 16,
+        bottom: 16,
+        zIndex: 2000,
+        width: 420,
+        background: "#fff",
+        border: UI.BORDER,
+        borderRadius: UI.CARD_RADIUS,
+        boxShadow: "0 24px 60px rgba(0,0,0,0.18)",
+        overflow: "hidden",
+      };
+
   return (
-    <div style={{ position: "absolute", right: 16, bottom: 16, zIndex: 2000, width: 420, background: "#fff", border: UI.BORDER, borderRadius: UI.CARD_RADIUS, boxShadow: "0 24px 60px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+    <div style={sheetStyle}>
       <div style={{ position: "relative" }}>
         <img
           src={det.img}
           alt="evidência"
-          onError={(e) => { e.currentTarget.src = svgDataURI(det.classe === "erva" ? "Erva daninha" : "Doença", tagBg); }}
-          style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }}
+          onError={(e) => {
+            e.currentTarget.src = svgDataURI(det.classe === "erva" ? "Erva daninha" : "Doença", tagBg);
+          }}
+          style={{
+            width: "100%",
+            height: isPhone ? 180 : 220,
+            objectFit: "cover",
+            display: "block",
+          }}
         />
         <div style={{ position: "absolute", left: 12, bottom: 12, display: "flex", gap: 8 }}>
           <span style={{ padding: "6px 10px", borderRadius: 999, background: tagBg, color: "#fff", fontSize: 12, fontWeight: 700 }}>
@@ -295,13 +379,34 @@ const EvidencePanel = memo(function EvidencePanel({ det, onClose }: { det: Detec
         <button
           onClick={onClose}
           aria-label="Fechar painel de evidência"
-          style={{ position: "absolute", top: 8, right: 8, width: 32, height: 32, borderRadius: 16, background: "rgba(15,23,42,0.85)", color: "#fff", border: "none", cursor: "pointer", fontSize: 18, lineHeight: "32px" }}
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            background: "rgba(15,23,42,0.85)",
+            color: "#fff",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 20,
+            lineHeight: "36px",
+          }}
         >
           ×
         </button>
       </div>
       <div style={{ padding: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 13, color: "#334155" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isPhone ? "1fr" : "1fr 1fr",
+            gap: 10,
+            fontSize: 13,
+            color: "#334155",
+          }}
+        >
           <div>
             <div style={{ fontSize: 12, color: "#64748b" }}>Data e hora</div>
             <div style={{ fontWeight: 600 }}>{date.toLocaleString("pt-BR")}</div>
@@ -325,11 +430,18 @@ const EvidencePanel = memo(function EvidencePanel({ det, onClose }: { det: Detec
 });
 
 const EconomicCard = memo(function EconomicCard(props: {
-  doseLHa: number; setDoseLHa: (v: number) => void;
-  precoPorL: number; setPrecoPorL: (v: number) => void;
-  perdaHa: number; setPerdaHa: (v: number) => void;
-  eficacia: number; setEficacia: (v: number) => void;
-  areaTratada: number; custo: number; beneficio: number; roi: number;
+  doseLHa: number;
+  setDoseLHa: (v: number) => void;
+  precoPorL: number;
+  setPrecoPorL: (v: number) => void;
+  perdaHa: number;
+  setPerdaHa: (v: number) => void;
+  eficacia: number;
+  setEficacia: (v: number) => void;
+  areaTratada: number;
+  custo: number;
+  beneficio: number;
+  roi: number;
 }) {
   const { doseLHa, setDoseLHa, precoPorL, setPrecoPorL, perdaHa, setPerdaHa, areaTratada, custo, beneficio, roi } = props;
 
@@ -376,6 +488,7 @@ const EconomicCard = memo(function EconomicCard(props: {
 });
 
 export default function MapaCalorPropriedade() {
+  const { isPhone, isTablet } = useBreakpoint();
   const [seed] = useState(12345678);
   const [samples] = useState(10_000_000);
   const [radius] = useState(10);
@@ -411,10 +524,7 @@ export default function MapaCalorPropriedade() {
   const visibleDetections = useMemo(() => activeDetections.slice(0, 120), [activeDetections]);
 
   const effectiveSamples = useMemo(() => Math.min(samples, HEAT.MAX_SAMPLES), [samples]);
-  const heatPoints = useMemo(
-    () => sampleHeatPoints({ polygon, hotspots: activeHotspots, seed, samples: effectiveSamples }),
-    [polygon, activeHotspots, seed, effectiveSamples]
-  );
+  const heatPoints = useMemo(() => sampleHeatPoints({ polygon, hotspots: activeHotspots, seed, samples: effectiveSamples }), [polygon, activeHotspots, seed, effectiveSamples]);
 
   const bounds = useMemo(() => L.latLngBounds(polygon.map((p) => [p[1], p[0]] as LatLngLeaflet)), [polygon]);
   const center = useMemo<LatLngLeaflet>(() => {
@@ -426,12 +536,14 @@ export default function MapaCalorPropriedade() {
   const areaHa = useMemo(() => {
     const lngs = polygon.map((p) => p[0]);
     const lats = polygon.map((p) => p[1]);
-    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs),
+      maxLng = Math.max(...lngs);
+    const minLat = Math.min(...lats),
+      maxLat = Math.max(...lats);
     const latCenter = (minLat + maxLat) / 2;
     const widthM = (maxLng - minLng) * 111320 * Math.cos((latCenter * Math.PI) / 180);
     const heightM = (maxLat - minLat) * 111320;
-    return Number(((Math.abs(widthM * heightM)) / 10000).toFixed(2));
+    return Number((Math.abs(widthM * heightM) / 10000).toFixed(2));
   }, [polygon]);
 
   const coverage = useMemo(() => {
@@ -473,7 +585,7 @@ export default function MapaCalorPropriedade() {
     return serie.map((x) => Number((x * 100).toFixed(1)));
   }, [coverage, spreadPotential]);
 
-  const projDelta7d = useMemo(() => projection7d.length ? Number((projection7d.at(-1)! - projection7d[0]).toFixed(1)) : 0, [projection7d]);
+  const projDelta7d = useMemo(() => (projection7d.length ? Number((projection7d.at(-1)! - projection7d[0]).toFixed(1)) : 0), [projection7d]);
   const growthPerDay = useMemo(() => Number((projDelta7d / 7).toFixed(2)), [projDelta7d]);
   const growthLabel = useMemo(() => `${growthPerDay >= 0 ? "+" : ""}${growthPerDay} pp/dia`, [growthPerDay]);
 
@@ -485,9 +597,15 @@ export default function MapaCalorPropriedade() {
 
   const riskScore = useMemo(() => {
     const score = clamp(0.65 * coverage + 2.5 * Math.max(0, growthPerDay), 0, 100);
-    let label = "Baixo", color = "#22c55e";
-    if (score >= 70) { label = "Alto"; color = "#ef4444"; }
-    else if (score >= 40) { label = "Médio"; color = "#eab308"; }
+    let label = "Baixo",
+      color = "#22c55e";
+    if (score >= 70) {
+      label = "Alto";
+      color = "#ef4444";
+    } else if (score >= 40) {
+      label = "Médio";
+      color = "#eab308";
+    }
     return { score: Number(score.toFixed(0)), label, color };
   }, [coverage, growthPerDay]);
 
@@ -499,67 +617,61 @@ export default function MapaCalorPropriedade() {
   const areaSeveraEq = useMemo(() => Number(((meanIntensity / 100) * areaHa).toFixed(2)), [meanIntensity, areaHa]);
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f5f7fb", padding: 24 }}>
+    <div style={{ minHeight: "100dvh", background: "#f5f7fb", padding: isPhone ? 12 : 24 }}>
       <div style={{ width: "100%", margin: 0 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 420px) 1fr", gap: 20 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isPhone ? "1fr" : "minmax(300px, 420px) 1fr",
+            gap: isPhone ? 12 : 20,
+          }}
+        >
           <div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <Chip active={selected.has("pre")} onClick={() => togglePassada("pre")}>Pré</Chip>
-              <Chip active={selected.has("plantio")} onClick={() => togglePassada("plantio")}>Plantio</Chip>
-              <Chip active={selected.has("adubo")} onClick={() => togglePassada("adubo")}>Adubo</Chip>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+              <Chip active={selected.has("pre")} onClick={() => togglePassada("pre")}>
+                Pré
+              </Chip>
+              <Chip active={selected.has("plantio")} onClick={() => togglePassada("plantio")}>
+                Plantio
+              </Chip>
+              <Chip active={selected.has("adubo")} onClick={() => togglePassada("adubo")}>
+                Adubo
+              </Chip>
             </div>
 
             <div style={{ display: "grid", gap: 16 }}>
               <EconomicCard
-                doseLHa={doseLHa} setDoseLHa={setDoseLHa}
-                precoPorL={precoPorL} setPrecoPorL={setPrecoPorL}
-                perdaHa={perdaHa} setPerdaHa={setPerdaHa}
-                eficacia={eficacia} setEficacia={setEficacia}
+                doseLHa={doseLHa}
+                setDoseLHa={setDoseLHa}
+                precoPorL={precoPorL}
+                setPrecoPorL={setPrecoPorL}
+                perdaHa={perdaHa}
+                setPerdaHa={setPerdaHa}
+                eficacia={eficacia}
+                setEficacia={setEficacia}
                 areaTratada={areaTratada}
                 custo={custo}
                 beneficio={beneficio}
                 roi={roi}
               />
-              <IndicatorCard
-                title="Severidade média"
-                value={`${meanIntensity}%`}
-                subtitle={`p95: ${p95Intensity}% • área severa eq.: ${areaSeveraEq} ha`}
-                accent="#8b5cf6"
-                footer={<Progress value={meanIntensity} />}
-              />
+              <IndicatorCard title="Severidade média" value={`${meanIntensity}%`} subtitle={`p95: ${p95Intensity}% • área severa eq.: ${areaSeveraEq} ha`} accent="#8b5cf6" footer={<Progress value={meanIntensity} />} />
               <IndicatorCard title="Área do talhão" value={`${areaHa} ha`} subtitle="polígono atual" accent="#0ea5e9" />
             </div>
           </div>
 
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(180px, 1fr))", gap: 12, margin: "0 0 12px" }}>
-              <IndicatorCard
-                title="Crescimento estimado"
-                value={growthLabel}
-                subtitle={`Projeção 7d: ${projDelta7d >= 0 ? "+" : ""}${projDelta7d} pp`}
-                accent="#0ea5e9"
-                footer={<Sparkline data={projection7d} stroke="#0ea5e9" />}
-              />
-              <IndicatorCard
-                title="Área crítica (≥ limiar)"
-                value={`${areaTratada} ha`}
-                subtitle={`${coverage}% da área`}
-                accent="#ef4444"
-                footer={<Progress value={coverage} />}
-              />
-              <IndicatorCard
-                title="Focos ativos"
-                value={`${activeHotspots.length}`}
-                subtitle={`Densidade: ${Number((activeHotspots.length / Math.max(0.001, areaHa)).toFixed(2))} focos/ha • Risco ${riskLabel.label}`}
-                accent={riskLabel.color}
-              />
-              <IndicatorCard
-                title="Risco composto"
-                value={riskScore.label}
-                subtitle={`score ${riskScore.score}/100`}
-                accent={riskScore.color}
-                footer={<Progress value={riskScore.score} />}
-              />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isPhone ? "repeat(2, minmax(140px, 1fr))" : "repeat(4, minmax(180px, 1fr))",
+                gap: 12,
+                margin: "0 0 12px",
+              }}
+            >
+              <IndicatorCard title="Crescimento estimado" value={growthLabel} subtitle={`Projeção 7d: ${projDelta7d >= 0 ? "+" : ""}${projDelta7d} pp`} accent="#0ea5e9" footer={<Sparkline data={projection7d} stroke="#0ea5e9" />} />
+              <IndicatorCard title="Área crítica (≥ limiar)" value={`${areaTratada} ha`} subtitle={`${coverage}% da área`} accent="#ef4444" footer={<Progress value={coverage} />} />
+              <IndicatorCard title="Focos ativos" value={`${activeHotspots.length}`} subtitle={`Densidade: ${Number((activeHotspots.length / Math.max(0.001, areaHa)).toFixed(2))} focos/ha • Risco ${riskLabel.label}`} accent={riskLabel.color} />
+              <IndicatorCard title="Risco composto" value={riskScore.label} subtitle={`score ${riskScore.score}/100`} accent={riskScore.color} footer={<Progress value={riskScore.score} />} />
             </div>
 
             <div style={{ position: "relative" }}>
@@ -567,12 +679,12 @@ export default function MapaCalorPropriedade() {
                 <MapContainer
                   bounds={bounds}
                   center={center}
-                  style={{ width: "100%", height: "76dvh", background: "#e5e7eb" }}
-                  dragging={false}
-                  scrollWheelZoom={false}
-                  doubleClickZoom={false}
-                  touchZoom={false}
-                  boxZoom={false}
+                  style={{ width: "100%", height: isPhone ? "56dvh" : "76dvh", background: "#e5e7eb" }}
+                  dragging={isPhone || isTablet}
+                  scrollWheelZoom={isPhone || isTablet}
+                  doubleClickZoom={true}
+                  touchZoom={true}
+                  boxZoom={true}
                   keyboard={false}
                   zoomControl={false}
                   maxBounds={bounds}
@@ -597,7 +709,17 @@ export default function MapaCalorPropriedade() {
                 </MapContainer>
               </div>
 
-              <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "center",
+                  marginTop: 8,
+                  fontSize: isPhone ? 11 : 12,
+                  color: "#6b7280",
+                  flexWrap: "wrap",
+                }}
+              >
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 10, height: 10, borderRadius: 999, background: "#16a34a", display: "inline-block" }} />
                   Verde = erva daninha
